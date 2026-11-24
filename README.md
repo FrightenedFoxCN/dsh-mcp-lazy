@@ -5,7 +5,7 @@
 两件事：
 
 1. `mcp_lazy` 工具在运行时开关 MCP 服务器，让启动只为真正要用的服务付费；
-2. 两个垫片（`shims/`）修掉 MCP 服务器退出时的两类泄漏：**不响应 stdin EOF** 和 **孙进程不被回收**。
+2. 一个通用垫片（`shims/reap.mjs`）修掉 MCP 服务器退出时的**孙进程泄漏**：harness 只关 stdio，不遍历进程树。
 
 ---
 
@@ -54,28 +54,7 @@ mcp_lazy action=disable server=wolfram    # 立即停止，释放进程与内存
 
 实现是 `loader.resolve(entry)` + `loader.update(entry, {...options, disabled})`。
 
-## 3. 垫片一：`shims/wolfram-quit.mjs`
-
-Wolfram AgentTools 的 MCP 服务器**只认字面量 `Quit`**：
-
-```wl
-If[ stdin === "Quit", Exit[ 0 ] ];
-If[ ! StringQ @ stdin || StringTrim @ stdin === "", Throw @ EndOfFile ];
-...
-If[ AssociationQ @ response, WriteLine[...], Pause[ 0.1 ] ]
-```
-
-客户端关闭 transport 后 `stdin` 变成 `EndOfFile`，不是 `Association`，于是循环继续 `Pause[0.1]`——**永不退出**。客户端只能等满 `closeTimeoutMs`（默认 5s）再放弃，而内核及其 `MathematicaServer` 子进程可能存活。
-
-垫片转发 stdio，在 EOF/信号时写入 `Quit`，并对**进程组**升级 SIGTERM→SIGKILL：
-
-| | 之前 | 之后 |
-|---|---|---|
-| 关闭 | 挂死 / 等满 5s | **267ms** |
-
-启动耗时不变（那是工具初始化成本，见 §5）。
-
-## 4. 垫片二：`shims/reap.mjs`
+## 3. 垫片：`shims/reap.mjs`
 
 harness 关闭时只关 stdio，**不遍历进程树**。`uvx`/`npx`/`opam exec` 这类启动器把真正的服务器留成**孙进程**，父进程一死就 reparent 到 `init`。本机曾观察到一对 `uvx lean-lsp-mcp` 在其 DSH 父进程退出 12 分钟后仍存活（ppid=1）。
 
@@ -104,7 +83,7 @@ env:
 
 实测：握手正常（22 tools / 395ms），退出 57ms，**无残留**。
 
-## 5. Wolfram 启动为什么是 7.6 秒（拆解）
+## 4. Wolfram 启动为什么是 7.6 秒（拆解）
 
 | 阶段 | 耗时 |
 |---|---|
@@ -116,7 +95,7 @@ env:
 
 启动期间无网络连接（`lsof -i` 采样为空），所以不是网络问题；第一次工具调用只多 0.63s，所以预热不阻塞调用。配置层面没有跳过工具初始化的开关——**按需启停是唯一有效的手段**。
 
-## 6. 一页速查：把重服务设成默认关闭
+## 5. 一页速查：把重服务设成默认关闭
 
 ```yaml
 - insert:
@@ -128,7 +107,7 @@ env:
 
 `disabled` 的初始状态**持久**（写在配置里），`mcp_lazy enable` 只对当前进程有效——重启回到配置状态。这是有意为之：临时开的东西不该变成永久成本。
 
-## 7. 实测记录（2026-11-25）
+## 6. 实测记录（2026-11-25）
 
 | 动作 | 结果 |
 |---|---|
@@ -138,7 +117,7 @@ env:
 | `enable agda` → 调用 | 73 工具，`agda_load` 891ms |
 | `disable agda` → 进程 | reaper + `npm exec` + `node agda-mcp-server` 全部回收，计数 0 |
 
-## 8. 限制
+## 7. 限制
 
 1. **工具滞后一步**（§2）：enable 之后要等下一次请求。
 2. **`disable` 是立即卸载**：正在执行的调用会被中断。
