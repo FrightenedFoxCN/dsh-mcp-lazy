@@ -1,0 +1,24 @@
+{
+  "name": "@local/dsh-mcp-lazy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "On-demand MCP server loading for DeepSeek Harness: keep heavy MCP rows disabled at boot and enable them with one tool call.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "shims"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT"
+}

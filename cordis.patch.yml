@@ -1,0 +1,28 @@
+# dsh-mcp-lazy bundle patch.
+#
+# Registers one tool that turns heavy MCP server rows on and off at runtime, so
+# boot does not pay for servers a session never uses.
+#
+# `servers[].entry` is the Loader entry id as shown by the plugin list, which is
+# `include:<patch id>` for rows that come from a bundle patch.
+- insert:
+    - id: mcp-lazy
+      name: '@local/dsh-mcp-lazy'
+      config:
+        toolName: mcp_lazy
+        servers:
+          - name: wolfram
+            entry: include:wolfram-mcp
+            note: Wolfram Engine (Symbolic math, ~8s to start)
+          - name: agda
+            entry: include:agda-mcp
+            note: Agda (interactive proof development)
+          - name: smt
+            entry: include:smt-mcp
+            note: SMT (Z3 + cvc5 cross-checked)
+          - name: rocq
+            entry: include:rocq-mcp
+            note: Rocq (pet + coq-lsp)
+          - name: lean4
+            entry: include:lean-mcp
+            note: Lean 4 (Mathlib LSP)
